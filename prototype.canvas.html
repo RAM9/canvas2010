@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html xml:lang="en" xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
+  <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1"/>
+    <title></title>
+    <link href="prototype.canvas_files/master.html" type="text/css" media="Screen" rel="stylesheet"/>
+    <link rel="shortcut icon" href="http://fierce-stone-74.heroku.com/favicon.ico"/>
+    <style type="text/css">
+      #art{ position:absolute; top:0px; left:0px;background:rgb(000,000,000);}
+      .help {position:absolute; top:0px; right:0px;}
+      .comments {position:absolute; top:200px;right:0px;}
+    </style>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.js"></script>
+  </head><body>
+    <canvas id="art" width="640" height="400">
+    </canvas>
+
+<pre class="help">Commands
+---
+CANVAS:
+
+ESC or TAB or ENTER - show palette menu 
+SPACE - TOGGLE Draw or Cursor
+
+PALETTE:
+
+ LEFT - next color left
+ RIGHT - next color right
+
+ ENTER, ESC, SPACE ,TAB - keep selected color 
+                          and hide menu
+
+</pre>
+<pre class="comments">todo.
+* extract form and sybolize code
+* 16 colors palette wheel/square etc
+* show selected color in palette menu
+<strike>* include black!</strike>
+<strike>* arrow in palette menu</strike>
+* saving -- toDataURL !! 
+**  -- View Image - base65 
+<strike>esc - show menu !!! ( EXCITING)</strike>
+<strike>make photocopy for lou. (asked charlie about his copy)</strike>
+</pre>
+
+<script type="text/javascript" src="https://raw.github.com/douglascrockford/JSON-js/master/json.js"></script>
+<!-- Important to ensure that javascript does not get executed out of order -->
+<script type="text/javascript">
+  //<![CDATA[
+/* This is marked CDATA - it is not parsed by the x(ht)ml parser
+   The above statement is marked as a javasript comment
+   to prevent the javascript parser from interpteting it
+ */   
+var CANVAS = document.getElementById('art');
+var LAYER = CANVAS.getContext('2d');
+var CURSOR_MODE = 1;
+var CURSOR_COLOR = '#F00';
+var GROUND_COLOR = '#333';
+var PALETTE = ['#FFFFFF','#FFFF00','#FF00FF','#FF0000','#C0C0C0','#808080','#808000','#800080','#800000','#00FFFF','#00FF00','#008080','#008000','#0000FF','#000080','#000000'];
+var selected_color = 0;
+
+var show_palette_menu = function() {
+  // imagine this canvas is divided into cells
+  var gw = Math.floor(CANVAS.width/80);  
+  var gh = Math.floor(CANVAS.height/24);
+  var x = gw * 10;
+  var y = gh * 6;
+  var w = gw * 60;
+  var h = gh * 8;
+  var background = GROUND_COLOR;
+  var unload_palette_menu = function() {
+    document.onkeypress=key_pressed; 
+    restore_under_palette_menu();
+  };
+  var under_palette_menu_buffer = 0;
+  var store_under_palette_menu = function(){
+    under_palette_menu_buffer = LAYER.getImageData(x,y,w,h);
+  };
+
+  var restore_under_palette_menu = function(){
+    if (0 != under_palette_menu_buffer)
+      LAYER.putImageData(under_palette_menu_buffer,x,y);
+  };
+
+  var bg = function(){
+    LAYER.fillStyle = background;
+    LAYER.fillRect(x,y,w,h);
+  };
+
+  var color_positions = [];
+  var fg = function(){
+    var fgx = x + gw;
+    var fgy = y + gh;
+    var fgw = gw*2;
+    var fgh = gh*2;
+
+    for(var i= 0; i < PALETTE.length; i++)
+    {
+      var px = fgx+(i+1)*fgw;
+      var py = fgy;
+      var pw = fgw;
+      var ph = fgh;
+
+      LAYER.fillStyle = PALETTE[i];
+      LAYER.fillRect(px,py,pw,ph);
+
+      // move_arrow dependancy
+      color_positions[i] = {x:px,y:py,w:pw,h:ph};
+      // if firefox 3.5
+      //LAYER.font = "20pt Arial";
+      //LAYER.strokeText("["+i+"]",fgx*(i+1),fgy+(fgh*5));
+    }
+  };
+  var last_arrow_dim = 0;
+  var move_arrow = function(position) {
+    var ay = color_positions[position].y +  color_positions[position].h*1.25;
+    var ax = color_positions[position].x + (color_positions[position].w/2);
+    var ah = color_positions[position].h;
+    var aw = color_positions[position].w/2;
+
+    var atx_left = ax-aw/2; //arrow tip left x
+    var atx_right = ax+aw/2
+
+      if (0 != last_arrow_dim)
+      {
+        LAYER.save();
+        LAYER.fillStyle = background;
+        LAYER.fillRect(last_arrow_dim.x,last_arrow_dim.y,last_arrow_dim.w,last_arrow_dim.h);
+        LAYER.restore();
+      }
+    // set last_arrow
+    last_arrow_dim = {};
+    last_arrow_dim.x = atx_left-1;
+    last_arrow_dim.y = ay-1;
+    last_arrow_dim.w = (atx_right-atx_left)+2;
+    last_arrow_dim.h = ah+1;
+
+    LAYER.save();
+    LAYER.beginPath();
+    LAYER.lineWidth = 2;
+    LAYER.lineJoin = 'round';
+
+    LAYER.moveTo(ax,ay);
+    LAYER.lineTo(ax,ay+ah);
+
+    LAYER.moveTo(ax,ay);
+    LAYER.lineTo(atx_left,ay+(ah/2));
+
+    LAYER.moveTo(ax,ay);
+    LAYER.lineTo(atx_right,ay+(ah/2));
+    LAYER.strokeStyle = CURSOR_COLOR;
+    LAYER.stroke();
+    LAYER.closePath();
+    LAYER.restore();
+  };
+
+  var draw_palette_menu = function() {
+    store_under_palette_menu();
+    bg();
+    fg();
+    move_arrow(selected_color); // depends on fg call
+    draw_selected_color(selected_color);
+  };
+
+  var draw_selected_color = function(selected_color){
+    var scx = x + gw*45;
+    var scy = y + gh;
+    var scw = gw*5;
+    var sch = gh*3;
+    LAYER.save();
+    LAYER.fillStyle = PALETTE[selected_color];
+    LAYER.fillRect(scx,scy,scw,sch);
+    LAYER.restore();
+
+  }
+
+  var palette_menu_key_pressed = function(_event) {
+    var key_code=_event.keyCode;
+    var char_code=_event.charCode;
+    code = key_code > 0 ? key_code : char_code ;
+    switch(code)
+    {
+      case 37: // left
+        move_arrow(selected_color > 0 ? --selected_color : (selected_color=PALETTE.length-1));
+        draw_selected_color(selected_color);
+        break;
+      case 39: //right 
+        move_arrow(selected_color+1 < PALETTE.length ? ++selected_color : (selected_color=0));
+        draw_selected_color(selected_color);
+        break;
+      case 9: // tab   
+      case 27: // esc
+      case 13: // enter
+      case 32: // space
+        unload_palette_menu()
+          return false; // consume tab
+        break;
+    }
+  };
+
+  document.onkeypress = palette_menu_key_pressed;
+  draw_palette_menu();
+};
+
+var key_pressed = function(_event){
+  var key_code=_event.keyCode;
+  var char_code=_event.charCode;
+  code = key_code > 0 ? key_code : char_code ;
+  switch(code)
+  {
+    case 32:  // space
+      CURSOR_MODE = CURSOR_MODE == 1 ? 0 : 1;
+      cursor_destroyed_me = 0;
+      break;
+    case 27: //esc
+    case 13: //enter
+    case 9: //tab
+      show_palette_menu();
+      return false; // consume tab
+      break;
+  }
+  //LEFT_UP_RIGHT_DOWN=[37,38,39,40];
+  var delta = [0,0,0,0];
+  delta[key_code - 37] = 1;
+  draw(delta);
+
+};
+
+document.onkeypress=key_pressed;
+
+var BLOCK_SIZE = 8 ;
+var cursor_x = 100;
+var cursor_y = 100;
+
+var cursor_destroyed_me = 0;
+
+var paint_buffer = 0;
+
+var update_cursor = function(x,y)
+{
+  cursor_x = x;
+  cursor_y = y;
+}
+
+var move_cursor = function(x,y)
+{
+  var size = BLOCK_SIZE;
+  if (CURSOR_MODE)
+  {
+    cursor_destroyed_me = LAYER.getImageData(x,y,size,size);
+    LAYER.fillStyle = CURSOR_COLOR;
+    LAYER.fillRect(x,y,size,size);
+  }
+}
+
+var restore_under_cursor = function()
+{
+  if (CURSOR_MODE)
+  {
+    if(cursor_destroyed_me != 0)
+    {
+      LAYER.putImageData(cursor_destroyed_me,cursor_x,cursor_y);
+      cursor_destroyed_me = 0;
+    }
+  }
+  if (paint_buffer != 0)
+  { 
+    LAYER.putImageData(paint_buffer,cursor_x,cursor_y);
+    paint_buffer = 0;
+  }
+}
+var paint_to_buffer = function(x,y,size)
+{
+  LAYER.fillStyle = PALETTE[selected_color];
+  LAYER.fillRect(x,y,size,size);
+
+  paint_buffer = LAYER.getImageData(x,y,size,size);
+
+  LAYER.fillStyle = CURSOR_COLOR;
+  LAYER.fillRect(x,y+((size/3)*2),size,size/3);
+}
+var draw = function(delta) {
+  var x =cursor_x;
+  var y =cursor_y;
+  var size = BLOCK_SIZE;
+  var step = size;
+
+  restore_under_cursor();
+
+  x -= delta[0] * step; // left;
+  x += delta[2] * step; // right;
+  y -= delta[1] * step; // up;
+  y += delta[3] * step; // down;
+
+  if (!CURSOR_MODE)
+  {
+    paint_to_buffer(x,y,size);
+  }
+  else if (CURSOR_MODE)
+  {
+    move_cursor(x,y);
+  }
+  update_cursor(x,y);
+};
+jQuery(document).ready(function(){
+    draw([0,0,0,0]);
+    });
+/* CDATA line end cannot contain spaces or line breaks */
+//]]>
+</script>
+
+</body></html>
